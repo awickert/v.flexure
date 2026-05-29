@@ -16,6 +16,44 @@ As both <em>v.flexure</em> and <a href="r.flexure.html">r.flexure</a> are interf
 <p>
 In latitude/longitude coordinates, <em>v.flexure</em> automatically computes great-circle distances between load and output points.
 
+<h2>EXAMPLES</h2>
+
+<h3>Three seamounts along a volcanic chain</h3>
+
+<p>
+Three point loads represent seamounts spaced 500&nbsp;km apart. Each
+force (~5&nbsp;&times;&nbsp;10<sup>16</sup>&nbsp;N) corresponds roughly to
+a seamount with a 25&nbsp;km base radius, 3&nbsp;km height, and basalt
+density. Because the flexural parameter
+&alpha;&nbsp;&asymp;&nbsp;41&nbsp;km for T<sub>e</sub>&nbsp;=&nbsp;25&nbsp;km
+is much smaller than the 500&nbsp;km spacing, the three depressions are
+essentially independent; their deflections add linearly everywhere.
+</p>
+
+<div class="code"><pre>
+# Domain: 2000 × 1000 km at 20 km resolution (projected CRS required)
+g.region n=1000000 s=0 e=2000000 w=0 res=20000
+
+# Three seamounts along the chain (x y, one per line)
+echo "500000 500000
+1000000 500000
+1500000 500000" | v.in.ascii format=point input=- output=seamount_chain
+
+# Add load column and set the same force [N] for all three points
+v.db.addtable map=seamount_chain
+v.db.addcolumn map=seamount_chain columns="force double precision"
+v.db.update map=seamount_chain column=force value=5e16
+
+# SAS_NG deflection; output as vector points and raster
+v.flexure input=seamount_chain column=force \
+    te=25 te_units=km \
+    output=w_chain_pts \
+    raster_output=w_chain_rast
+
+d.rast w_chain_rast
+d.legend w_chain_rast
+</pre></div>
+
 <h2>SEE ALSO</h2>
 
 <em>
