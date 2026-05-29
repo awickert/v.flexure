@@ -72,6 +72,7 @@
 # %  key: raster_output
 # %  description: Output raster map of vertical deflections [m]
 # %  required : no
+# %  guisection: Output
 # %end
 
 # %option
@@ -80,6 +81,7 @@
 # %  description: gravitational acceleration at surface [m/s^2]
 # %  answer: 9.8
 # %  required : no
+# %  guisection: Material properties
 # %end
 
 # %option
@@ -88,6 +90,7 @@
 # %  description: Young's Modulus [Pa]
 # %  answer: 65E9
 # %  required : no
+# %  guisection: Material properties
 # %end
 
 # %option
@@ -96,6 +99,7 @@
 # %  description: Poisson's ratio
 # %  answer: 0.25
 # %  required : no
+# %  guisection: Material properties
 # %end
 
 # %option
@@ -104,6 +108,7 @@
 # %  description: Density of material that fills flexural depressions [kg/m^3]
 # %  answer: 0
 # %  required : no
+# %  guisection: Material properties
 # %end
 
 # %option
@@ -112,6 +117,7 @@
 # %  description: Mantle density [kg/m^3]
 # %  answer: 3300
 # %  required : no
+# %  guisection: Material properties
 # %end
 
 
@@ -201,9 +207,8 @@ def main():
     if len(grass.parse_command("g.list", type="vect", pattern=options["output"])):
         if not grass.overwrite():
             grass.fatal(
-                "Vector map '"
-                + options["output"]
-                + "' already exists. Use '--o' to overwrite."
+                _("Vector map <%s> already exists. Use '--o' to overwrite.")
+                % options["output"]
             )
     # Just check raster at the same time if it exists
     if len(
@@ -211,9 +216,8 @@ def main():
     ):
         if not grass.overwrite():
             grass.fatal(
-                "Raster map '"
-                + options["raster_output"]
-                + "' already exists. Use '--o' to overwrite."
+                _("Raster map <%s> already exists. Use '--o' to overwrite.")
+                % options["raster_output"]
             )
     grass.run_command(
         "v.mkgrid",
@@ -237,11 +241,8 @@ def main():
         flex.q = col_values[:, q_col].squeeze()  # Make it 1D for consistency w/ x, y
     else:
         grass.fatal(
-            "provided column name, "
-            + options["column"]
-            + " does not match\nany column in "
-            + options["input"]
-            + "."
+            _("Column <%s> not found in vector map <%s>.")
+            % (options["column"], options["input"])
         )
     # Elastic thickness
     flex.Te = float(options["te"])
@@ -250,7 +251,7 @@ def main():
     elif options["te_units"] == "m":
         pass
     else:
-        grass.fatal("Inappropriate te_units. How? Options should be limited by GRASS.")
+        grass.fatal(_("Inappropriate te_units; this should not be reachable."))
     flex.rho_fill = float(options["rho_fill"])
 
     # Parameters that often stay at their default values
@@ -275,14 +276,17 @@ def main():
         flex.latlon = True
         flex.PlanetaryRadius = float(grass.parse_command("g.proj", flags="j")["+a"])
         if flex.Verbose:
-            print("Latitude/longitude grid.")
-            print("Based on r_Earth = 6371 km")
-            print("Computing distances between load points using great circle paths")
+            grass.message(_("Latitude/longitude grid."))
+            grass.message(_("Based on r_Earth = 6371 km"))
+            grass.message(
+                _("Computing distances between load points using great circle paths")
+            )
 
     ##########
     # SOLVE! #
     ##########
 
+    grass.message(_("Computing flexural deflections..."))
     flex.initialize()
     flex.run()
     flex.finalize()
