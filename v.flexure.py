@@ -8,7 +8,7 @@
 # PURPOSE:      Calculate flexure of the lithosphere under a specified
 #               set of loads and with a given elastic thickness (scalar)
 #
-# COPYRIGHT:    (c) 2014, 2015 Andrew Wickert
+# COPYRIGHT:    (c) 2014, 2015, 2026 Andrew Wickert
 #
 #               This program is free software under the GNU General Public
 #               License (>=v2). Read the file COPYING that comes with GRASS
@@ -17,9 +17,7 @@
 #############################################################################
 #
 # REQUIREMENTS:
-#      -  gFlex: http://csdms.colorado.edu/wiki/gFlex
-#         (should be downloaded automatically along with the module)
-#         github repository: https://github.com/awickert/gFlex
+#      -  gFlex: https://github.com/awickert/gFlex
 
 # More information
 # Started 20 Jan 2015 to add GRASS GIS support for distributed point loads
@@ -52,7 +50,7 @@
 #%option
 #%  key: te
 #%  type: double
-#%  description: Elastic thicnkess: scalar; unis chosen in "te_units"
+#%  description: Elastic thickness: scalar; units chosen in "te_units"
 #%  required : yes
 #%end
 
@@ -168,12 +166,12 @@ def main():
     # we will actually do the computation
     try:
         import gflex
-    except:
+    except Exception:
         print("")
         print("MODULE IMPORT ERROR.")
-        print("In order to run r.flexure or g.flexure, you must download and install")
+        print("In order to run v.flexure, you must download and install")
         print("gFlex. The most recent development version is available from")
-        print("https://github.com/awickert/gFlex")
+        print("https://github.com/awickert/gFlex.")
         print("Installation instructions are available on the page.")
         grass.fatal("Software dependency must be installed.")
 
