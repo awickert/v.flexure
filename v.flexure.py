@@ -235,7 +235,7 @@ def main():
             "provided column name, "
             + options["column"]
             + " does not match\nany column in "
-            + options["q0"]
+            + options["input"]
             + "."
         )
     # Elastic thickness
