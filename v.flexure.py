@@ -161,19 +161,24 @@ def main():
     # if just interface description is requested, it will not get to this point
     # so gflex will not be needed
 
-    # GFLEX
-    # try to import gflex only after we know that
-    # we will actually do the computation
+    # Import gFlex only after we know we will actually do the computation
     try:
         import gflex
-    except Exception:
-        print("")
-        print("MODULE IMPORT ERROR.")
-        print("In order to run v.flexure, you must download and install")
-        print("gFlex. The most recent development version is available from")
-        print("https://github.com/awickert/gFlex.")
-        print("Installation instructions are available on the page.")
-        grass.fatal("Software dependency must be installed.")
+    except ImportError:
+        grass.fatal(
+            _(
+                "Cannot import gFlex. Install it from source with:\n"
+                "  pip install -e /path/to/gFlex\n"
+                "or see https://github.com/awickert/gFlex for details."
+            )
+        )
+
+    # TODO: restore minimum-version guard when gFlex 2.0.0 is released:
+    # if tuple(int(x) for x in gflex.__version__.split(".")[:3]) < (2, 0, 0):
+    #     grass.fatal(
+    #         _("v.flexure requires gFlex >= 2.0.0; installed: ")
+    #         + gflex.__version__
+    #     )
 
     ##########
     # SET-UP #
