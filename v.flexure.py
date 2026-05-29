@@ -336,14 +336,5 @@ def main():
         )
 
 
-def install_dependencies():
-    print("PLACEHOLDER")
-
-
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--install-dependencies":
-        install_dependencies()
-    else:
-        main()
+    main()
