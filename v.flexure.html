@@ -12,7 +12,7 @@ As both <em>v.flexure</em> and <a href="r.flexure.html">r.flexure</a> are interf
 <p>
 <b>te</b>, written in standard notation as T<sub>e</sub>, is the lithospheric elastic thickness (scalar only for v.flexure).
 <p>
-<b>output</b> is a grid of vector points at the spacing and extent of the current GRASS computational region. Be sure to use <em>g.region</em> to set the region before running the module. <b>raster_output</b> provides the same result as a raster at the current region resolution. Because the deflection field is smooth relative to the flexural wavelength, the vector output can be interpolated to a finer resolution (e.g., with <em>v.surf.bspline</em>) without introducing significant error.
+<b>output</b> is a grid of vector points at the spacing and extent of the current GRASS computational region. Be sure to use <em><a href="https://grass.osgeo.org/grass-stable/manuals/g.region.html">g.region</a></em> to set the region before running the module. <b>raster_output</b> provides the same result as a raster at the current region resolution. Because the deflection field is smooth relative to the flexural wavelength, the vector output can be interpolated to a finer resolution (e.g., with <em><a href="https://grass.osgeo.org/grass-stable/manuals/v.surf.bspline.html">v.surf.bspline</a></em>) without introducing significant error.
 <p>
 In latitude/longitude coordinates, <em>v.flexure</em> automatically computes great-circle distances between load and output points.
 
