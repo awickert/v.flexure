@@ -126,11 +126,13 @@
 ##################
 
 # PYTHON
+import os
+import tempfile
+
 import numpy as np
 
 # GRASS
 import grass.script as grass
-from grass.pygrass import vector
 
 
 ####################
@@ -139,16 +141,13 @@ from grass.pygrass import vector
 
 
 def get_points_xy(vect_name):
-    """
-    to find x and y using pygrass, see my (A. Wickert's) StackOverflow answer:
-    http://gis.stackexchange.com/questions/28061/how-to-access-vector-coordinates-in-grass-gis-from-python
-    """
-    points = vector.VectorTopo(vect_name)
-    points.open("r")
-    coords = []
-    for i in range(len(points)):
-        coords.append(points.read(i + 1).coords())
-    coords = np.array(coords)
+    """Return (x, y) coordinate arrays for all points in a vector map."""
+    out = grass.read_command(
+        "v.out.ascii", input=vect_name, format="point",
+        separator="space", quiet=True
+    )
+    rows = [line.split() for line in out.strip().splitlines() if line.strip()]
+    coords = np.array([[float(r[0]), float(r[1])] for r in rows], dtype=float)
     return coords[:, 0], coords[:, 1]  # x, y
 
 
@@ -238,7 +237,7 @@ def main():
     q_col = col_names == options["column"]
     if np.sum(q_col):
         col_values = np.array(list(vect_db["values"].values())).astype(float)
-        flex.q = col_values[:, q_col].squeeze()  # Make it 1D for consistency w/ x, y
+        flex.q = col_values[:, q_col].reshape(-1)  # always 1-D, even for a single point
     else:
         grass.fatal(
             _("Column <%s> not found in vector map <%s>.")
@@ -291,27 +290,23 @@ def main():
     flex.run()
     flex.finalize()
 
-    # Now to use lower-level GRASS vector commands to work with the database
-    # table and update its entries
-    # See for help:
-    # http://nbviewer.ipython.org/github/zarch/workshop-pygrass/blob/master/02_Vector.ipynb
-    w = vector.VectorTopo(options["output"])
-    w.open("rw")  # Get ready to read and write
-    wdb = w.dblinks[0]
-    wtable = wdb.table()
-    col = int(
-        (np.array(wtable.columns.names()) == "w").nonzero()[0]
-    )  # update this column
-    for i in range(1, len(w) + 1):
-        # ignoring 1st column: assuming it will be category (always true here)
-        wnewvalues = (
-            list(w[i].attrs.values())[1:col]
-            + tuple([flex.w[i - 1]])
-            + list(w[i].attrs.values())[col + 1 :]
+    # Write deflection values to the output vector's attribute table.
+    # v.mkgrid assigns sequential cats (1, 2, ...) in row-major order,
+    # matching the order of flex.w returned by gFlex.
+    table_name = options["output"].split("@")[0]
+    sql_lines = [
+        "UPDATE {t} SET w = {val} WHERE cat = {cat};".format(
+            t=table_name, val=float(flex.w[i]), cat=i + 1
         )
-        wtable.update(key=i, values=wnewvalues)
-    wtable.conn.commit()  # Save this
-    w.close(build=False)  # don't build here b/c it is always verbose
+        for i in range(len(flex.w))
+    ]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".sql", delete=False) as f:
+        f.write("\n".join(sql_lines))
+        sql_file = f.name
+    try:
+        grass.run_command("db.execute", input=sql_file, quiet=True)
+    finally:
+        os.unlink(sql_file)
     grass.run_command("v.build", map=options["output"], quiet=True)
 
     # And raster export

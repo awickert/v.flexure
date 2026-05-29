@@ -60,6 +60,7 @@ class TestVFlexure(TestCase):
             format="point",
             input="-",
             stdin_="500 500",
+            separator="space",
             output=cls.loads,
         )
         # Attach an attribute table, then add and set the load column
