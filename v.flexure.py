@@ -195,7 +195,7 @@ def main():
     flex.grass = True
 
     # Method
-    flex.Method = "SAS_NG"
+    flex.method = "sas_ng"
 
     # Parameters that are often changed for the solution
     ######################################################
@@ -244,9 +244,9 @@ def main():
             % (options["column"], options["input"])
         )
     # Elastic thickness
-    flex.Te = float(options["te"])
+    flex.T_e = float(options["te"])
     if options["te_units"] == "km":
-        flex.Te *= 1000
+        flex.T_e *= 1000
     elif options["te_units"] == "m":
         pass
     else:
@@ -264,17 +264,17 @@ def main():
 
     # Set verbosity
     if grass.verbosity() >= 2:
-        flex.Verbose = True
+        flex.verbose = True
     if grass.verbosity() >= 3:
-        flex.Debug = True
+        flex.debug = True
     elif grass.verbosity() == 0:
-        flex.Quiet = True
+        flex.quiet = True
 
     # Check if lat/lon and let user know if verbosity is True
     if grass.region_env()[6] == "3":
         flex.latlon = True
         flex.PlanetaryRadius = float(grass.parse_command("g.proj", flags="j")["+a"])
-        if flex.Verbose:
+        if flex.verbose:
             grass.message(_("Latitude/longitude grid."))
             grass.message(_("Based on r_Earth = 6371 km"))
             grass.message(
