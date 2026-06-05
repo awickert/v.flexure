@@ -288,6 +288,8 @@ def main():
     grass.message(_("Computing flexural deflections..."))
     flex.initialize()
     flex.run()
+    # finalize() deletes flex.w in gFlex v2, so capture it first
+    w_out = list(flex.w)
     flex.finalize()
 
     # Write deflection values to the output vector's attribute table.
@@ -296,9 +298,9 @@ def main():
     table_name = options["output"].split("@")[0]
     sql_lines = [
         "UPDATE {t} SET w = {val} WHERE cat = {cat};".format(
-            t=table_name, val=float(flex.w[i]), cat=i + 1
+            t=table_name, val=float(w_out[i]), cat=i + 1
         )
-        for i in range(len(flex.w))
+        for i in range(len(w_out))
     ]
     with tempfile.NamedTemporaryFile(mode="w", suffix=".sql", delete=False) as f:
         f.write("\n".join(sql_lines))
