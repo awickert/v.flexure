@@ -47,7 +47,6 @@ class TestVFlexure(TestCase):
 
     loads = "test_vflex_loads"
     output = "test_vflex_rout"
-    vector_output = "test_vflex_vout"
 
     @classmethod
     def setUpClass(cls):
@@ -55,7 +54,6 @@ class TestVFlexure(TestCase):
         # 10×10 grid at 100 m resolution (1 km × 1 km)
         cls.runModule("g.region", n=1000, s=0, e=1000, w=0, res=100)
         # Single point at domain center (500, 500), loaded as a point force [N]
-        # v.in.ascii format=point: default assigns cat=1 to first point
         cls.runModule(
             "v.in.ascii",
             format="point",
@@ -64,7 +62,6 @@ class TestVFlexure(TestCase):
             separator="space",
             output=cls.loads,
         )
-        # Attach an attribute table, then add and set the load column
         cls.runModule("v.db.addtable", map=cls.loads)
         cls.runModule(
             "v.db.addcolumn",
@@ -83,19 +80,12 @@ class TestVFlexure(TestCase):
     def tearDownClass(cls):
         cls.del_temp_region()
         cls.runModule(
-            "g.remove",
-            flags="f",
-            type="vector",
-            name=cls.loads,
-            quiet=True,
+            "g.remove", flags="f", type="vector", name=cls.loads, quiet=True
         )
 
     def tearDown(self):
         self.runModule(
             "g.remove", flags="f", type="raster", name=self.output, quiet=True
-        )
-        self.runModule(
-            "g.remove", flags="f", type="vector", name=self.vector_output, quiet=True
         )
 
     def test_basic_deflection(self):
@@ -109,13 +99,9 @@ class TestVFlexure(TestCase):
             output=self.output,
         )
         self.assertRasterExists(self.output)
-        # All 100 output cells should be non-null (grid covers full region)
         self.assertRasterFitsUnivar(
             raster=self.output, reference={"n": 100}, precision=0
         )
-        # Interface-layer sign check: deflection under a downward load must be
-        # negative, and must be physically plausible (not orders of magnitude
-        # off due to a Te unit conversion bug or wrong grid-spacing scale).
         stats = grass.parse_command("r.univar", map=self.output, flags="g")
         min_w = float(stats["min"])
         self.assertLess(min_w, 0,
@@ -123,19 +109,74 @@ class TestVFlexure(TestCase):
         self.assertGreater(min_w, -1000,
                            "Deflection magnitude must be physically plausible (< 1 km)")
 
-    def test_vector_output(self):
-        """vector_output option produces a valid vector alongside the raster."""
-        self.assertModule(
-            "v.flexure",
-            input=self.loads,
-            column="q",
-            te="10000",
-            te_units="m",
-            output=self.output,
-            vector_output=self.vector_output,
-        )
-        self.assertRasterExists(self.output)
-        self.assertVectorExists(self.vector_output)
+    def test_w_points_output(self):
+        """w_points writes deflection values into an existing vector map."""
+        w_pts = "test_vflex_wpts"
+        try:
+            # Create a small set of arbitrary evaluation points
+            self.runModule(
+                "v.in.ascii",
+                format="point",
+                input="-",
+                stdin_="200 200\n500 500\n800 800",
+                separator="space",
+                output=w_pts,
+            )
+            self.runModule("v.db.addtable", map=w_pts)
+            self.assertModule(
+                "v.flexure",
+                input=self.loads,
+                column="q",
+                te="10000",
+                te_units="m",
+                output=self.output,
+                w_points=w_pts,
+            )
+            self.assertRasterExists(self.output)
+            # The w column should now exist and be populated
+            db = grass.vector_db_select(w_pts)
+            col_lower = [c.lower() for c in db["columns"]]
+            self.assertIn("w", col_lower,
+                          "w column should be present in w_points map")
+            w_idx = col_lower.index("w")
+            w_vals = [float(row[w_idx]) for row in db["values"].values()]
+            self.assertTrue(any(v < 0 for v in w_vals),
+                            "At least one deflection value should be negative")
+        finally:
+            self.runModule(
+                "g.remove", flags="f", type="vector", name=w_pts, quiet=True
+            )
+
+    def test_w_points_custom_column(self):
+        """w_column parameter controls the name of the written column."""
+        w_pts = "test_vflex_wpts_col"
+        try:
+            self.runModule(
+                "v.in.ascii",
+                format="point",
+                input="-",
+                stdin_="500 500",
+                separator="space",
+                output=w_pts,
+            )
+            self.runModule("v.db.addtable", map=w_pts)
+            self.assertModule(
+                "v.flexure",
+                input=self.loads,
+                column="q",
+                te="10000",
+                te_units="m",
+                output=self.output,
+                w_points=w_pts,
+                w_column="deflection",
+            )
+            db = grass.vector_db_select(w_pts)
+            self.assertIn("deflection", [c.lower() for c in db["columns"]],
+                          "deflection column should be present in w_points map")
+        finally:
+            self.runModule(
+                "g.remove", flags="f", type="vector", name=w_pts, quiet=True
+            )
 
     def test_te_km_units(self):
         """Te in km produces output without error."""
@@ -164,12 +205,7 @@ class TestVFlexure(TestCase):
         self.assertRasterExists(self.output)
 
     def test_multi_point_loads(self):
-        """Two load points are processed correctly; exercises the SQL attribute loop.
-
-        Interface-layer test: the SQL UPDATE loop in v.flexure writes one row
-        per output grid point. Using two input loads (rather than one) ensures
-        both the coordinate-pair iteration and multi-row SQL batches are covered.
-        """
+        """Two load points are processed correctly; exercises the SQL attribute loop."""
         loads2 = "test_vflex_loads2"
         output2 = "test_vflex_rout2"
         try:
@@ -202,10 +238,10 @@ class TestVFlexure(TestCase):
             self.assertRasterExists(output2)
         finally:
             self.runModule(
-                "g.remove", flags="f", type="vector", name=loads2, quiet=True,
+                "g.remove", flags="f", type="vector", name=loads2, quiet=True
             )
             self.runModule(
-                "g.remove", flags="f", type="raster", name=output2, quiet=True,
+                "g.remove", flags="f", type="raster", name=output2, quiet=True
             )
 
 
