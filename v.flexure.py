@@ -128,6 +128,7 @@
 # PYTHON
 import os
 import tempfile
+import warnings
 
 import numpy as np
 
@@ -289,11 +290,15 @@ def main():
     ##########
 
     grass.message(_("Computing flexural deflections..."))
-    flex.initialize()
-    flex.run()
-    # finalize() deletes flex.w in gFlex v2, so capture it first
-    w_out = list(flex.w)
-    flex.finalize()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        flex.initialize()
+        flex.run()
+        # finalize() deletes flex.w in gFlex v2, so capture it first
+        w_out = list(flex.w)
+        flex.finalize()
+    for warninfo in caught:
+        grass.warning(str(warninfo.message))
 
     # Write deflection values to the output vector's attribute table.
     # v.mkgrid assigns sequential cats (1, 2, ...) in row-major order,
