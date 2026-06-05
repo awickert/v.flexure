@@ -41,7 +41,7 @@
 # %  guidependency: column
 # %end
 
-# %option G_OPT_DB_COLUMNS
+# %option G_OPT_DB_COLUMN
 # %  key: column
 # %  description: Column containing load values [N]
 # %  required : yes
