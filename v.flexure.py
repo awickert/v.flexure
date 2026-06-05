@@ -62,15 +62,15 @@
 # %  required : yes
 # %end
 
-# %option G_OPT_V_OUTPUT
+# %option G_OPT_R_OUTPUT
 # %  key: output
-# %  description: Output vector points map of vertical deflections [m]
+# %  description: Output raster map of vertical deflections [m]
 # %  required : yes
 # %end
 
-# %option G_OPT_R_OUTPUT
-# %  key: raster_output
-# %  description: Output raster map of vertical deflections [m]
+# %option G_OPT_V_OUTPUT
+# %  key: vector_output
+# %  description: Output vector points map of vertical deflections [m]
 # %  required : no
 # %  guisection: Output
 # %end
@@ -206,36 +206,39 @@ def main():
 
     # x, y, q
     flex.x, flex.y = get_points_xy(options["input"])
-    # xw, yw: gridded output
-    if len(grass.parse_command("g.list", type="vect", pattern=options["output"])):
-        if not grass.overwrite():
-            grass.fatal(
-                _("Vector map <%s> already exists. Use '--o' to overwrite.")
-                % options["output"]
-            )
-    # Just check raster at the same time if it exists
-    if len(
-        grass.parse_command("g.list", type="rast", pattern=options["raster_output"])
+    # Determine the working vector map name: permanent if requested, else temporary
+    vect_name = options["vector_output"] if options["vector_output"] \
+        else "tmp_vflex_{}".format(os.getpid())
+    _vect_is_tmp = not bool(options["vector_output"])
+    # Overwrite checks
+    if options["vector_output"] and len(
+        grass.parse_command("g.list", type="vect", pattern=vect_name)
     ):
         if not grass.overwrite():
             grass.fatal(
+                _("Vector map <%s> already exists. Use '--o' to overwrite.")
+                % vect_name
+            )
+    if len(grass.parse_command("g.list", type="rast", pattern=options["output"])):
+        if not grass.overwrite():
+            grass.fatal(
                 _("Raster map <%s> already exists. Use '--o' to overwrite.")
-                % options["raster_output"]
+                % options["output"]
             )
     grass.run_command(
         "v.mkgrid",
-        map=options["output"],
+        map=vect_name,
         type="point",
-        overwrite=grass.overwrite(),
+        overwrite=True,
         quiet=True,
     )
     grass.run_command(
         "v.db.addcolumn",
-        map=options["output"],
+        map=vect_name,
         columns="w double precision",
         quiet=True,
     )
-    flex.xw, flex.yw = get_points_xy(options["output"])  # gridded output coordinates
+    flex.xw, flex.yw = get_points_xy(vect_name)  # gridded output coordinates
     vect_db = grass.vector_db_select(options["input"])
     col_names = np.array(vect_db["columns"])
     q_col = col_names == options["column"]
@@ -300,10 +303,10 @@ def main():
     for warninfo in caught:
         grass.warning(str(warninfo.message))
 
-    # Write deflection values to the output vector's attribute table.
+    # Write deflection values to the working vector's attribute table.
     # v.mkgrid assigns sequential cats (1, 2, ...) in row-major order,
     # matching the order of flex.w returned by gFlex.
-    table_name = options["output"].split("@")[0]
+    table_name = vect_name.split("@")[0]
     sql_lines = [
         "UPDATE {t} SET w = {val} WHERE cat = {cat};".format(
             t=table_name, val=float(w_out[i]), cat=i + 1
@@ -317,27 +320,27 @@ def main():
         grass.run_command("db.execute", input=sql_file, quiet=True)
     finally:
         os.unlink(sql_file)
-    grass.run_command("v.build", map=options["output"], quiet=True)
+    grass.run_command("v.build", map=vect_name, quiet=True)
 
-    # And raster export
-    # "w" vector defined by raster resolution, so can do direct v.to.rast
-    # though if this option isn't selected, the user can do a finer-grained
-    # interpolation, which shouldn't introduce much error so long as these
-    # outputs are spaced at << 1 flexural wavelength.
-    if options["raster_output"]:
+    # Raster output (primary, required)
+    grass.run_command(
+        "v.to.rast",
+        input=vect_name,
+        output=options["output"],
+        use="attr",
+        attribute_column="w",
+        type="point",
+        overwrite=grass.overwrite(),
+        quiet=True,
+    )
+    grass.run_command(
+        "r.colors", map=options["output"], color="differences", quiet=True
+    )
+
+    # Clean up temporary vector if vector_output was not requested
+    if _vect_is_tmp:
         grass.run_command(
-            "v.to.rast",
-            input=options["output"],
-            output=options["raster_output"],
-            use="attr",
-            attribute_column="w",
-            type="point",
-            overwrite=grass.overwrite(),
-            quiet=True,
-        )
-        # And create a nice colormap!
-        grass.run_command(
-            "r.colors", map=options["raster_output"], color="differences", quiet=True
+            "g.remove", flags="f", type="vector", name=vect_name, quiet=True
         )
 
 
