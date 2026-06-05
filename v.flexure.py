@@ -68,9 +68,17 @@
 # %  required : yes
 # %end
 
-# %option G_OPT_V_OUTPUT
-# %  key: vector_output
-# %  description: Output vector points map of vertical deflections [m]
+# %option G_OPT_V_MAP
+# %  key: w_points
+# %  description: Existing vector points map to receive deflection values
+# %  required : no
+# %  guisection: Output
+# %end
+
+# %option G_OPT_DB_COLUMN
+# %  key: w_column
+# %  description: Column in w_points map to write deflection values [m]
+# %  answer: w
 # %  required : no
 # %  guisection: Output
 # %end
@@ -204,41 +212,8 @@ def main():
     # Parameters that are often changed for the solution
     ######################################################
 
-    # x, y, q
+    # x, y, q — load point coordinates and magnitudes
     flex.x, flex.y = get_points_xy(options["input"])
-    # Determine the working vector map name: permanent if requested, else temporary
-    vect_name = options["vector_output"] if options["vector_output"] \
-        else "tmp_vflex_{}".format(os.getpid())
-    _vect_is_tmp = not bool(options["vector_output"])
-    # Overwrite checks
-    if options["vector_output"] and len(
-        grass.parse_command("g.list", type="vect", pattern=vect_name)
-    ):
-        if not grass.overwrite():
-            grass.fatal(
-                _("Vector map <%s> already exists. Use '--o' to overwrite.")
-                % vect_name
-            )
-    if len(grass.parse_command("g.list", type="rast", pattern=options["output"])):
-        if not grass.overwrite():
-            grass.fatal(
-                _("Raster map <%s> already exists. Use '--o' to overwrite.")
-                % options["output"]
-            )
-    grass.run_command(
-        "v.mkgrid",
-        map=vect_name,
-        type="point",
-        overwrite=True,
-        quiet=True,
-    )
-    grass.run_command(
-        "v.db.addcolumn",
-        map=vect_name,
-        columns="w double precision",
-        quiet=True,
-    )
-    flex.xw, flex.yw = get_points_xy(vect_name)  # gridded output coordinates
     vect_db = grass.vector_db_select(options["input"])
     col_names = np.array(vect_db["columns"])
     q_col = col_names == options["column"]
@@ -250,6 +225,31 @@ def main():
             _("Column <%s> not found in vector map <%s>.")
             % (options["column"], options["input"])
         )
+
+    # Overwrite check for raster output
+    if len(grass.parse_command("g.list", type="rast", pattern=options["output"])):
+        if not grass.overwrite():
+            grass.fatal(
+                _("Raster map <%s> already exists. Use '--o' to overwrite.")
+                % options["output"]
+            )
+
+    # Build the output coordinate arrays.
+    # The raster grid is always needed; w_points coordinates (if provided) are
+    # appended so both are evaluated in a single gFlex solve.
+    _tmp_vect = "tmp_vflex_{}".format(os.getpid())
+    grass.run_command("v.mkgrid", map=_tmp_vect, type="point", overwrite=True, quiet=True)
+    grass.run_command("v.db.addcolumn", map=_tmp_vect, columns="w double precision", quiet=True)
+    grid_x, grid_y = get_points_xy(_tmp_vect)
+    n_grid = len(grid_x)
+
+    if options["w_points"]:
+        pts_x, pts_y = get_points_xy(options["w_points"])
+        flex.xw = np.concatenate([grid_x, pts_x])
+        flex.yw = np.concatenate([grid_y, pts_y])
+    else:
+        flex.xw = grid_x
+        flex.yw = grid_y
     # Elastic thickness
     flex.T_e = float(options["te"])
     if options["te_units"] == "km":
@@ -298,20 +298,21 @@ def main():
         flex.initialize()
         flex.run()
         # finalize() deletes flex.w in gFlex v2, so capture it first
-        w_out = list(flex.w)
+        w_out = np.array(flex.w)
         flex.finalize()
     for warninfo in caught:
         grass.warning(str(warninfo.message))
 
-    # Write deflection values to the working vector's attribute table.
-    # v.mkgrid assigns sequential cats (1, 2, ...) in row-major order,
-    # matching the order of flex.w returned by gFlex.
-    table_name = vect_name.split("@")[0]
+    # Split results: first n_grid values go to the raster grid
+    w_grid = w_out[:n_grid]
+
+    # Write grid deflections to the temporary vector, then rasterise
+    # v.mkgrid assigns sequential cats (1, 2, ...) in row-major order
     sql_lines = [
         "UPDATE {t} SET w = {val} WHERE cat = {cat};".format(
-            t=table_name, val=float(w_out[i]), cat=i + 1
+            t=_tmp_vect, val=float(w_grid[i]), cat=i + 1
         )
-        for i in range(len(w_out))
+        for i in range(n_grid)
     ]
     with tempfile.NamedTemporaryFile(mode="w", suffix=".sql", delete=False) as f:
         f.write("\n".join(sql_lines))
@@ -320,12 +321,12 @@ def main():
         grass.run_command("db.execute", input=sql_file, quiet=True)
     finally:
         os.unlink(sql_file)
-    grass.run_command("v.build", map=vect_name, quiet=True)
+    grass.run_command("v.build", map=_tmp_vect, quiet=True)
 
     # Raster output (primary, required)
     grass.run_command(
         "v.to.rast",
-        input=vect_name,
+        input=_tmp_vect,
         output=options["output"],
         use="attr",
         attribute_column="w",
@@ -336,12 +337,42 @@ def main():
     grass.run_command(
         "r.colors", map=options["output"], color="differences", quiet=True
     )
+    grass.run_command("g.remove", flags="f", type="vector", name=_tmp_vect, quiet=True)
 
-    # Clean up temporary vector if vector_output was not requested
-    if _vect_is_tmp:
-        grass.run_command(
-            "g.remove", flags="f", type="vector", name=vect_name, quiet=True
-        )
+    # Write deflection values to the user-supplied w_points map
+    if options["w_points"]:
+        w_pts = w_out[n_grid:]
+        col = options["w_column"]
+        # Add column if it does not already exist
+        existing_cols = [
+            c.lower()
+            for c in grass.vector_db_select(options["w_points"])["columns"]
+        ]
+        if col.lower() not in existing_cols:
+            grass.run_command(
+                "v.db.addcolumn",
+                map=options["w_points"],
+                columns="{} double precision".format(col),
+                quiet=True,
+            )
+        pts_cats = list(grass.vector_db_select(options["w_points"])["values"].keys())
+        sql_lines = [
+            "UPDATE {t} SET {col} = {val} WHERE cat = {cat};".format(
+                t=options["w_points"].split("@")[0],
+                col=col,
+                val=float(w_pts[i]),
+                cat=pts_cats[i],
+            )
+            for i in range(len(w_pts))
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sql", delete=False) as f:
+            f.write("\n".join(sql_lines))
+            sql_file = f.name
+        try:
+            grass.run_command("db.execute", input=sql_file, quiet=True)
+        finally:
+            os.unlink(sql_file)
+        grass.run_command("v.build", map=options["w_points"], quiet=True)
 
 
 if __name__ == "__main__":
