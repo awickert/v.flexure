@@ -18,7 +18,7 @@ Source and further installation instructions are available at <a href="https://g
 <p>
 <b>te</b>, written in standard notation as T<sub>e</sub>, is the lithospheric elastic thickness (scalar only for v.flexure).
 <p>
-<b>output</b> is a grid of vector points at the spacing and extent of the current GRASS computational region. Be sure to use <em><a href="https://grass.osgeo.org/grass-stable/manuals/g.region.html">g.region</a></em> to set the region before running the module. <b>raster_output</b> provides the same result as a raster at the current region resolution. Because the deflection field is smooth relative to the flexural wavelength, the vector output can be interpolated to a finer resolution (e.g., with <em><a href="https://grass.osgeo.org/grass-stable/manuals/v.surf.bspline.html">v.surf.bspline</a></em>) without introducing significant error.
+<b>output</b> is a raster map of deflections at the spacing and extent of the current GRASS computational region. Be sure to use <em><a href="https://grass.osgeo.org/grass-stable/manuals/g.region.html">g.region</a></em> to set the region before running the module. The optional <b>vector_output</b> provides the same result as a vector points map. Because the deflection field is smooth relative to the flexural wavelength, the vector output can be interpolated to a finer resolution (e.g., with <em><a href="https://grass.osgeo.org/grass-stable/manuals/v.surf.bspline.html">v.surf.bspline</a></em>) without introducing significant error.
 <p>
 In latitude/longitude coordinates, <em>v.flexure</em> automatically computes great-circle distances between load and output points.
 
@@ -50,11 +50,11 @@ v.db.addtable map=seamount_chain
 v.db.addcolumn map=seamount_chain columns="force double precision"
 v.db.update map=seamount_chain column=force value=5e16
 
-# SAS_NG deflection; output as vector points and raster
+# SAS_NG deflection; raster output (primary), vector output (optional)
 v.flexure input=seamount_chain column=force \
     te=25 te_units=km \
-    output=w_chain_pts \
-    raster_output=w_chain_rast
+    output=w_chain_rast \
+    vector_output=w_chain_pts
 
 d.rast w_chain_rast
 d.legend w_chain_rast

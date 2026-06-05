@@ -46,8 +46,8 @@ class TestVFlexure(TestCase):
     """Test v.flexure with a synthetic single-point load (no NC dataset required)."""
 
     loads = "test_vflex_loads"
-    output = "test_vflex_out"
-    raster_output = "test_vflex_rout"
+    output = "test_vflex_rout"
+    vector_output = "test_vflex_vout"
 
     @classmethod
     def setUpClass(cls):
@@ -92,14 +92,14 @@ class TestVFlexure(TestCase):
 
     def tearDown(self):
         self.runModule(
-            "g.remove", flags="f", type="vector", name=self.output, quiet=True
+            "g.remove", flags="f", type="raster", name=self.output, quiet=True
         )
         self.runModule(
-            "g.remove", flags="f", type="raster", name=self.raster_output, quiet=True
+            "g.remove", flags="f", type="vector", name=self.vector_output, quiet=True
         )
 
     def test_basic_deflection(self):
-        """SAS_NG solver produces a valid deflection vector output."""
+        """SAS_NG solver produces a valid raster output."""
         self.assertModule(
             "v.flexure",
             input=self.loads,
@@ -108,34 +108,34 @@ class TestVFlexure(TestCase):
             te_units="m",
             output=self.output,
         )
-        self.assertVectorExists(self.output)
-
-    def test_raster_output(self):
-        """raster_output option produces a valid raster alongside the vector."""
-        self.assertModule(
-            "v.flexure",
-            input=self.loads,
-            column="q",
-            te="10000",
-            te_units="m",
-            output=self.output,
-            raster_output=self.raster_output,
-        )
-        self.assertVectorExists(self.output)
-        self.assertRasterExists(self.raster_output)
+        self.assertRasterExists(self.output)
         # All 100 output cells should be non-null (grid covers full region)
         self.assertRasterFitsUnivar(
-            raster=self.raster_output, reference={"n": 100}, precision=0
+            raster=self.output, reference={"n": 100}, precision=0
         )
         # Interface-layer sign check: deflection under a downward load must be
         # negative, and must be physically plausible (not orders of magnitude
         # off due to a Te unit conversion bug or wrong grid-spacing scale).
-        stats = grass.parse_command("r.univar", map=self.raster_output, flags="g")
+        stats = grass.parse_command("r.univar", map=self.output, flags="g")
         min_w = float(stats["min"])
         self.assertLess(min_w, 0,
                         "Deflection under a downward load must be negative")
         self.assertGreater(min_w, -1000,
                            "Deflection magnitude must be physically plausible (< 1 km)")
+
+    def test_vector_output(self):
+        """vector_output option produces a valid vector alongside the raster."""
+        self.assertModule(
+            "v.flexure",
+            input=self.loads,
+            column="q",
+            te="10000",
+            te_units="m",
+            output=self.output,
+            vector_output=self.vector_output,
+        )
+        self.assertRasterExists(self.output)
+        self.assertVectorExists(self.vector_output)
 
     def test_te_km_units(self):
         """Te in km produces output without error."""
@@ -147,7 +147,7 @@ class TestVFlexure(TestCase):
             te_units="km",
             output=self.output,
         )
-        self.assertVectorExists(self.output)
+        self.assertRasterExists(self.output)
 
     def test_custom_material_params(self):
         """Non-default Young's modulus and mantle density are accepted."""
@@ -161,7 +161,7 @@ class TestVFlexure(TestCase):
             ym="70E9",
             rho_m="3200",
         )
-        self.assertVectorExists(self.output)
+        self.assertRasterExists(self.output)
 
     def test_multi_point_loads(self):
         """Two load points are processed correctly; exercises the SQL attribute loop.
@@ -171,7 +171,7 @@ class TestVFlexure(TestCase):
         both the coordinate-pair iteration and multi-row SQL batches are covered.
         """
         loads2 = "test_vflex_loads2"
-        output2 = "test_vflex_out2"
+        output2 = "test_vflex_rout2"
         try:
             self.runModule(
                 "v.in.ascii",
@@ -199,11 +199,13 @@ class TestVFlexure(TestCase):
                 te_units="m",
                 output=output2,
             )
-            self.assertVectorExists(output2)
+            self.assertRasterExists(output2)
         finally:
             self.runModule(
-                "g.remove", flags="f", type="vector",
-                name=",".join([loads2, output2]), quiet=True,
+                "g.remove", flags="f", type="vector", name=loads2, quiet=True,
+            )
+            self.runModule(
+                "g.remove", flags="f", type="raster", name=output2, quiet=True,
             )
 
 
