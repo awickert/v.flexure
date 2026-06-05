@@ -178,7 +178,11 @@ def main():
             )
         )
 
-    if tuple(int(x) for x in gflex.__version__.split(".")[:3]) < (2, 0, 0):
+    _gver = tuple(
+        int(x.split("a")[0].split("b")[0].split("rc")[0])
+        for x in gflex.__version__.split(".")[:3]
+    )
+    if _gver < (2, 0, 0):
         grass.fatal(
             _("v.flexure requires gFlex >= 2.0.0; installed: ")
             + gflex.__version__
