@@ -26,6 +26,7 @@ Run inside a GRASS session (e.g., with --tmp-location XY):
 
 import unittest
 
+import grass.script as grass
 from grass.gunittest.case import TestCase
 from grass.gunittest.main import test
 
@@ -126,6 +127,15 @@ class TestVFlexure(TestCase):
         self.assertRasterFitsUnivar(
             raster=self.raster_output, reference={"n": 100}, precision=0
         )
+        # Interface-layer sign check: deflection under a downward load must be
+        # negative, and must be physically plausible (not orders of magnitude
+        # off due to a Te unit conversion bug or wrong grid-spacing scale).
+        stats = grass.parse_command("r.univar", map=self.raster_output, flags="g")
+        min_w = float(stats["min"])
+        self.assertLess(min_w, 0,
+                        "Deflection under a downward load must be negative")
+        self.assertGreater(min_w, -1000,
+                           "Deflection magnitude must be physically plausible (< 1 km)")
 
     def test_te_km_units(self):
         """Te in km produces output without error."""
@@ -152,6 +162,49 @@ class TestVFlexure(TestCase):
             rho_m="3200",
         )
         self.assertVectorExists(self.output)
+
+    def test_multi_point_loads(self):
+        """Two load points are processed correctly; exercises the SQL attribute loop.
+
+        Interface-layer test: the SQL UPDATE loop in v.flexure writes one row
+        per output grid point. Using two input loads (rather than one) ensures
+        both the coordinate-pair iteration and multi-row SQL batches are covered.
+        """
+        loads2 = "test_vflex_loads2"
+        output2 = "test_vflex_out2"
+        try:
+            self.runModule(
+                "v.in.ascii",
+                format="point",
+                input="-",
+                stdin_="400 400\n600 600",
+                separator="space",
+                output=loads2,
+            )
+            self.runModule("v.db.addtable", map=loads2)
+            self.runModule(
+                "v.db.addcolumn", map=loads2, columns="q double precision"
+            )
+            self.runModule(
+                "v.db.update", map=loads2, column="q", value="1e15", where="cat=1"
+            )
+            self.runModule(
+                "v.db.update", map=loads2, column="q", value="8e14", where="cat=2"
+            )
+            self.assertModule(
+                "v.flexure",
+                input=loads2,
+                column="q",
+                te="10000",
+                te_units="m",
+                output=output2,
+            )
+            self.assertVectorExists(output2)
+        finally:
+            self.runModule(
+                "g.remove", flags="f", type="vector",
+                name=",".join([loads2, output2]), quiet=True,
+            )
 
 
 if __name__ == "__main__":
