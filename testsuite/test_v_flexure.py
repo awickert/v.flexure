@@ -204,6 +204,59 @@ class TestVFlexure(TestCase):
         )
         self.assertRasterExists(self.output)
 
+    def test_te_km_m_equivalence(self):
+        """Te=10 km and Te=10000 m must produce identical deflections.
+
+        Interface-layer test: verifies that the km→m conversion (Te *= 1000)
+        is applied correctly.
+        """
+        out_km = "test_vflex_te_km"
+        out_m = "test_vflex_te_m"
+        try:
+            self.assertModule(
+                "v.flexure", input=self.loads, column="q",
+                te="10", te_units="km", output=out_km,
+            )
+            self.assertModule(
+                "v.flexure", input=self.loads, column="q",
+                te="10000", te_units="m", output=out_m,
+            )
+            stats_km = grass.parse_command("r.univar", map=out_km, flags="g")
+            stats_m = grass.parse_command("r.univar", map=out_m, flags="g")
+            self.assertAlmostEqual(
+                float(stats_km["min"]), float(stats_m["min"]), places=10,
+                msg="Te in km and m must give identical min deflection",
+            )
+        finally:
+            self.runModule(
+                "g.remove", flags="f", type="raster",
+                name=",".join([out_km, out_m]), quiet=True,
+            )
+
+    def test_deflection_decays_with_distance(self):
+        """Deflection magnitude decreases with distance from the load point.
+
+        The load is at the domain centre (500, 500).  The minimum deflection
+        (peak subsidence, most negative) must be more negative than the mean,
+        which is pulled toward zero by cells far from the load.
+        """
+        self.assertModule(
+            "v.flexure",
+            input=self.loads,
+            column="q",
+            te="10000",
+            te_units="m",
+            output=self.output,
+        )
+        stats = grass.parse_command("r.univar", map=self.output, flags="g")
+        min_w = float(stats["min"])
+        mean_w = float(stats["mean"])
+        self.assertLess(
+            min_w, mean_w,
+            "Peak subsidence at load centre must exceed mean deflection",
+        )
+        self.assertLess(mean_w, 0, "Mean deflection must be negative")
+
     def test_multi_point_loads(self):
         """Two load points are processed correctly; exercises the SQL attribute loop."""
         loads2 = "test_vflex_loads2"
