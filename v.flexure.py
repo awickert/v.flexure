@@ -59,7 +59,8 @@
 # %  type: string
 # %  description: Units for elastic thickness
 # %  options: m, km
-# %  required : yes
+# %  answer: km
+# %  required : no
 # %end
 
 # %option G_OPT_R_OUTPUT
