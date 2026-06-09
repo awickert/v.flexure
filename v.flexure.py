@@ -178,7 +178,13 @@ def main():
 
     # Import gFlex only after we know we will actually do the computation
     try:
-        import gflex
+        # cmcrameri is an optional plotting dependency; GRASS never uses
+        # gFlex's plots, so suppress the missing-package warning at import.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="cmcrameri is not installed", category=UserWarning
+            )
+            import gflex
     except ImportError:
         grass.fatal(
             _(
