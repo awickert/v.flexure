@@ -276,13 +276,10 @@ def main():
     flex.nu = float(options["nu"])
     flex.rho_m = float(options["rho_m"])
 
-    # Set verbosity
-    if grass.verbosity() >= 2:
-        flex.verbose = True
+    # gFlex defaults to quiet (WARNING log level); opt in at --verbose (level 3).
     if grass.verbosity() >= 3:
-        flex.debug = True
-    elif grass.verbosity() == 0:
-        flex.quiet = True
+        flex.verbose = True
+        flex.quiet = False
 
     # Check if lat/lon and let user know if verbosity is True
     if grass.region_env()[6] == "3":
