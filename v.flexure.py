@@ -292,7 +292,7 @@ def main():
     # SOLVE! #
     ##########
 
-    grass.message(_("Computing flexural deflections..."))
+    grass.message(_("Computing deflections..."))
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         flex.initialize()
